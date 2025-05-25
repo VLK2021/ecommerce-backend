@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiResponse, ApiTags } from '@nestjs/swagger';
+
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -53,11 +54,22 @@ export class AuthController {
   refresh(@Req() req: any): Promise<TokenResponseDto> {
     const user = req.user;
     const authHeader = req.headers.authorization;
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new UnauthorizedException('Refresh token is missing');
     }
-    const refreshToken = authHeader.split(' ')[1];
-    return this.authService.refreshTokens(user.sub, refreshToken);
+
+    const token = authHeader.split(' ')[1];
+    return this.authService.refreshTokens(user.sub, token);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'Вийшов успішно' })
+  logout(@Req() req: any): Promise<{ message: string }> {
+    const userId = req.user.sub;
+    return this.authService.logout(userId);
   }
 
   @Get('me')

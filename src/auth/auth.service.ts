@@ -46,6 +46,11 @@ export class AuthService {
     return this.getTokensAndStoreRefresh(user);
   }
 
+  async logout(userId: string): Promise<{ message: string }> {
+    await this.usersService.updateRefreshToken(userId, null);
+    return { message: 'Вийшов успішно' };
+  }
+
   private async getTokensAndStoreRefresh(user: User) {
     const tokens = await this.generateTokens(user);
     const hashedRefresh = await bcrypt.hash(tokens.refreshToken, 10);

@@ -1,11 +1,11 @@
-import * as bcrypt from 'bcrypt';
 import { Injectable, ConflictException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async getAll() {
     return this.prisma.user.findMany({
@@ -23,16 +23,22 @@ export class UsersService {
   }
 
   async findById(id: string) {
-    return this.prisma.user.findUnique({ where: { id } });
+    return this.prisma.user.findUnique({
+      where: { id },
+    });
   }
 
   async findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email } });
+    return this.prisma.user.findUnique({
+      where: { email },
+    });
   }
 
   async create(dto: CreateUserDto) {
-    const existing = await this.findByEmail(dto.email);
-    if (existing) throw new ConflictException('Користувач з таким email вже існує');
+    const existingUser = await this.findByEmail(dto.email);
+    if (existingUser) {
+      throw new ConflictException('Користувач з таким email вже існує');
+    }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
@@ -45,10 +51,12 @@ export class UsersService {
     });
   }
 
-  async updateRefreshToken(userId: string, hashedToken: string) {
+  async updateRefreshToken(userId: string, hashedToken: string | null) {
     return this.prisma.user.update({
       where: { id: userId },
-      data: { hashedRefreshToken: hashedToken },
+      data: {
+        hashedRefreshToken: hashedToken,
+      },
     });
   }
 }
