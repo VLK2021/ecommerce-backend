@@ -2,22 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 
-type JwtPayload = {
-  sub: string;
-  email: string;
-  role: string;
-};
-
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
+export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor() {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: process.env.JWT_SECRET as string,
+      secretOrKey: process.env.JWT_SECRET!,
     });
   }
 
-  validate(payload: JwtPayload): JwtPayload {
-    return payload; // можна також повертати тільки потрібне: { userId: payload.sub, email: payload.email }
+  validate(payload: any) {
+    return payload; // sub, email, role
   }
 }

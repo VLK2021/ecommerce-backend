@@ -21,12 +21,7 @@ export class AuthService {
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) throw new ConflictException('Email already in use');
 
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const user = await this.usersService.create({
-      ...dto,
-      password: hashedPassword,
-    });
-
+    const user = await this.usersService.create(dto);
     return this.getTokensAndStoreRefresh(user);
   }
 
@@ -34,8 +29,8 @@ export class AuthService {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const valid = await bcrypt.compare(dto.password, user.password);
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    const isValid = await bcrypt.compare(dto.password, user.password);
+    if (!isValid) throw new UnauthorizedException('Invalid credentials');
 
     return this.getTokensAndStoreRefresh(user);
   }
@@ -53,23 +48,21 @@ export class AuthService {
 
   private async getTokensAndStoreRefresh(user: User) {
     const tokens = await this.generateTokens(user);
-
     const hashedRefresh = await bcrypt.hash(tokens.refreshToken, 10);
     await this.usersService.updateRefreshToken(user.id, hashedRefresh);
-
     return tokens;
   }
 
   private async generateTokens(user: User) {
-    const payload = { sub: user.id, role: user.role, email: user.email };
+    const payload = { sub: user.id, email: user.email, role: user.role };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(payload, {
-        secret: process.env.JWT_SECRET,
+        secret: process.env.JWT_SECRET!,
         expiresIn: '15m',
       }),
       this.jwt.signAsync(payload, {
-        secret: process.env.JWT_REFRESH_SECRET,
+        secret: process.env.JWT_REFRESH_SECRET!,
         expiresIn: '7d',
       }),
     ]);
