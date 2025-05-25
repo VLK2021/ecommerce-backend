@@ -27,7 +27,7 @@ export class AuthService {
       password: hashedPassword,
     });
 
-    return this.getTokens(user);
+    return this.getTokensAndStoreRefresh(user);
   }
 
   async login(dto: LoginDto) {
@@ -37,10 +37,30 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    return this.getTokens(user);
+    return this.getTokensAndStoreRefresh(user);
   }
 
-  async getTokens(user: User) {
+  async refreshTokens(userId: string, refreshToken: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user || !user.hashedRefreshToken)
+      throw new UnauthorizedException('Access Denied');
+
+    const isValid = await bcrypt.compare(refreshToken, user.hashedRefreshToken);
+    if (!isValid) throw new UnauthorizedException('Access Denied');
+
+    return this.getTokensAndStoreRefresh(user);
+  }
+
+  private async getTokensAndStoreRefresh(user: User) {
+    const tokens = await this.generateTokens(user);
+
+    const hashedRefresh = await bcrypt.hash(tokens.refreshToken, 10);
+    await this.usersService.updateRefreshToken(user.id, hashedRefresh);
+
+    return tokens;
+  }
+
+  private async generateTokens(user: User) {
     const payload = { sub: user.id, role: user.role, email: user.email };
 
     const [accessToken, refreshToken] = await Promise.all([

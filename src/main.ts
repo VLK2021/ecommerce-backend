@@ -3,11 +3,18 @@ import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { ValidationPipe, BadRequestException } from '@nestjs/common';
+import * as cookieParser from 'cookie-parser';
+import { ExpressAdapter } from '@nestjs/platform-express';
+import * as express from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const server = express(); // ⬅️ створення express-серверу
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(server)); // ⬅️ адаптер
 
-  // Глобальний ValidationPipe
+  // cookie parser
+  app.use(cookieParser());
+
+  // глобальний валідаційний пайп
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
@@ -24,10 +31,10 @@ async function bootstrap() {
     }),
   );
 
-  // Глобальний Exception Filter
+  // глобальний фільтр
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Swagger
+  // swagger
   const config = new DocumentBuilder()
     .setTitle('Ecommerce API')
     .setDescription('Документація до API інтернет-магазину')

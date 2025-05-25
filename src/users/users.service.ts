@@ -23,6 +23,17 @@ export class UsersService {
     });
   }
 
+  async findById(id: string) {
+    return this.prisma.user.findUnique({ where: { id } });
+  }
+
+  async updateRefreshToken(userId: string, hashedToken: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { hashedRefreshToken: hashedToken },
+    });
+  }
+
   async findByEmail(email: string) {
     return this.prisma.user.findUnique({ where: { email } });
   }
@@ -42,6 +53,7 @@ export class UsersService {
       data: {
         ...dto,
         password: hashedPassword,
+        hashedRefreshToken: null,
       },
     });
   }
