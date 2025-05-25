@@ -22,13 +22,21 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  @ApiResponse({ status: 201, description: 'Користувача зареєстровано', type: TokenResponseDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Користувача зареєстровано',
+    type: TokenResponseDto,
+  })
   register(@Body() dto: RegisterDto): Promise<TokenResponseDto> {
     return this.authService.register(dto);
   }
 
   @Post('login')
-  @ApiResponse({ status: 200, description: 'Успішний логін', type: TokenResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Успішний логін',
+    type: TokenResponseDto,
+  })
   @ApiResponse({ status: 401, description: 'Невірні облікові дані' })
   login(@Body() dto: LoginDto): Promise<TokenResponseDto> {
     return this.authService.login(dto);
@@ -37,7 +45,11 @@ export class AuthController {
   @Post('refresh')
   @UseGuards(RefreshAuthGuard)
   @ApiBearerAuth()
-  @ApiResponse({ status: 200, description: 'Оновлені токени', type: TokenResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Оновлені токени',
+    type: TokenResponseDto,
+  })
   refresh(@Req() req: any): Promise<TokenResponseDto> {
     const user = req.user;
     const authHeader = req.headers.authorization;
@@ -51,7 +63,11 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiResponse({ status: 200, description: 'Поточний користувач', type: UserEntity })
+  @ApiResponse({
+    status: 200,
+    description: 'Поточний користувач',
+    type: UserEntity,
+  })
   @ApiResponse({ status: 401, description: 'Неавторизовано' })
   getMe(@Req() req: any): UserEntity {
     return req.user;
