@@ -14,13 +14,16 @@ import { RefreshStrategy } from './refresh.strategy';
     ConfigModule,
     UsersModule,
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'secret123',
-      signOptions: { expiresIn: '15m' },
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: () => ({
+        secret: process.env.JWT_SECRET || 'secret123',
+        signOptions: { expiresIn: '15m' },
+      }),
     }),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, RefreshStrategy],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService],
 })
 export class AuthModule {}

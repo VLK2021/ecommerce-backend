@@ -15,6 +15,8 @@ import { LoginDto } from './dto/login.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RefreshAuthGuard } from './guards/refresh-auth.guard';
+import { Roles } from './decorators/roles.decorator';
+import { RolesGuard } from './guards/roles.guard';
 import { UserEntity } from '../users/user.entity';
 
 @ApiTags('Auth')
@@ -83,5 +85,14 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Неавторизовано' })
   getMe(@Req() req: any): UserEntity {
     return req.user;
+  }
+
+  @Get('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'Адмінська дія' })
+  getAdminStuff() {
+    return { message: 'Only for admins' };
   }
 }
