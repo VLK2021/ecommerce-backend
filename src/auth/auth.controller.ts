@@ -6,7 +6,9 @@ import {
   Req,
   Get,
   UnauthorizedException,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiBearerAuth, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { AuthService } from './auth.service';
@@ -30,8 +32,21 @@ export class AuthController {
     description: 'Користувача зареєстровано',
     type: TokenResponseDto,
   })
-  register(@Body() dto: RegisterDto): Promise<TokenResponseDto> {
-    return this.authService.register(dto);
+  async register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ accessToken: string }> {
+    const { accessToken, refreshToken } = await this.authService.register(dto);
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: false, // ❗ локально має бути false
+      sameSite: 'lax', // ❗ не strict
+      path: '/auth/refresh',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 днів
+    });
+
+    return { accessToken };
   }
 
   @Post('login')
@@ -41,8 +56,21 @@ export class AuthController {
     type: TokenResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Невірні облікові дані' })
-  login(@Body() dto: LoginDto): Promise<TokenResponseDto> {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ accessToken: string }> {
+    const { accessToken, refreshToken } = await this.authService.login(dto);
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: false, // ❗ локально має бути false
+      sameSite: 'lax',
+      path: '/auth/refresh',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return { accessToken };
   }
 
   @Post('refresh')
@@ -53,7 +81,7 @@ export class AuthController {
     description: 'Оновлені токени',
     type: TokenResponseDto,
   })
-  refresh(@Req() req: any): Promise<TokenResponseDto> {
+  async refresh(@Req() req: any): Promise<TokenResponseDto> {
     const user = req.user;
     const authHeader = req.headers.authorization;
 
@@ -68,9 +96,18 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiResponse({ status: 200, description: 'Вийшов успішно' })
-  logout(@Req() req: any): Promise<{ message: string }> {
+  async logout(
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ message: string }> {
     const userId = req.user.sub;
+
+    res.clearCookie('refreshToken', {
+      path: '/auth/refresh',
+      sameSite: 'lax',
+      secure: false,
+    });
+
     return this.authService.logout(userId);
   }
 

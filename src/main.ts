@@ -34,6 +34,12 @@ async function bootstrap() {
   // глобальний фільтр
   app.useGlobalFilters(new AllExceptionsFilter());
 
+  // 🔥 ВКЛЮЧАЄМО CORS для фронту
+  app.enableCors({
+    origin: 'http://localhost:5173',
+    credentials: true,
+  });
+
   // swagger
   const config = new DocumentBuilder()
     .setTitle('Ecommerce API')
