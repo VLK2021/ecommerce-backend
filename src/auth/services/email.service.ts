@@ -1,17 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
+import { Transporter } from 'nodemailer';
 
 @Injectable()
 export class EmailService {
-  private transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_FROM,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+  private transporter: Transporter;
 
-  async sendVerificationEmail(email: string, token: string) {
+  constructor() {
+    this.transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_FROM,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+  }
+
+  async sendVerificationEmail(email: string, token: string): Promise<void> {
     const confirmUrl = `${process.env.EMAIL_DOMAIN}verify-email?token=${token}`;
 
     await this.transporter.sendMail({
