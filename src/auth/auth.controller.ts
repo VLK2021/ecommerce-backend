@@ -5,13 +5,14 @@ import {
   UseGuards,
   Req,
   Get,
+  Query,
   UnauthorizedException,
   Res,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiBearerAuth, ApiResponse, ApiTags } from '@nestjs/swagger';
 
-import { AuthService } from './auth.service';
+import { AuthService } from './services/auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
@@ -29,19 +30,24 @@ export class AuthController {
   @Post('register')
   @ApiResponse({
     status: 201,
-    description: 'Користувача зареєстровано',
-    type: TokenResponseDto,
+    description: 'На пошту надіслано лист підтвердження',
   })
-  async register(
-    @Body() dto: RegisterDto,
+  async register(@Body() dto: RegisterDto): Promise<{ message: string }> {
+    return this.authService.register(dto);
+  }
+
+  @Get('verify-email')
+  @ApiResponse({ status: 200, description: 'Email підтверджено' })
+  async verify(
+    @Query('token') token: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ accessToken: string }> {
-    const { accessToken, refreshToken } = await this.authService.register(dto);
+    const { accessToken, refreshToken } = await this.authService.verifyEmail(token);
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: false, // ❗ локально має бути false
-      sameSite: 'lax', // ❗ не strict
+      secure: false, // локально false
+      sameSite: 'lax',
       path: '/auth/refresh',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 днів
     });
@@ -64,7 +70,7 @@ export class AuthController {
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: false, // ❗ локально має бути false
+      secure: false,
       sameSite: 'lax',
       path: '/auth/refresh',
       maxAge: 7 * 24 * 60 * 60 * 1000,

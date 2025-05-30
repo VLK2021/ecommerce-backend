@@ -2,26 +2,47 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
-import { UsersService } from '../users/users.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
+import { UsersService } from '../../users/users.service';
+import { RegisterDto } from '../dto/register.dto';
+import { LoginDto } from '../dto/login.dto';
 import { User } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { TempTokenStore } from '../temp-token-store';
+import { EmailService } from './email.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwt: JwtService,
+    private emailService: EmailService,
+    private tempTokenStore: TempTokenStore,
   ) {}
 
   async register(dto: RegisterDto) {
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) throw new ConflictException('Email already in use');
 
+    const token = randomUUID();
+    await this.tempTokenStore.set(token, dto);
+    await this.emailService.sendVerificationEmail(dto.email, token);
+
+    return { message: 'Лист з підтвердженням надіслано на вашу пошту' };
+  }
+
+  async verifyEmail(token: string) {
+    const dto = await this.tempTokenStore.get(token);
+    if (!dto) throw new BadRequestException('Недійсний або протермінований токен');
+
+    const existing = await this.usersService.findByEmail(dto.email);
+    if (existing) throw new ConflictException('Користувач вже існує');
+
     const user = await this.usersService.create(dto);
+    await this.tempTokenStore.delete(token);
     return this.getTokensAndStoreRefresh(user);
   }
 
@@ -48,7 +69,7 @@ export class AuthService {
 
   async logout(userId: string): Promise<{ message: string }> {
     await this.usersService.updateRefreshToken(userId, null);
-    return { message: 'Вийшов успішно' };
+    return { message: 'Вийшли успішно' };
   }
 
   private async getTokensAndStoreRefresh(user: User) {
