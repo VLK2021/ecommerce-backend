@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Param, Delete, Body } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  Delete,
+  Body,
+  Patch,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -8,6 +16,7 @@ import {
 } from '@nestjs/swagger';
 
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoriesService } from './services/categories.service';
 
 @ApiTags('Categories')
@@ -34,7 +43,9 @@ export class CategoriesController {
     status: 201,
     description: 'Категорія успішно створена',
   })
-  create(@Body() dto: CreateCategoryDto) {
+  create(
+    @Body() dto: CreateCategoryDto,
+  ): Promise<{ id: string; name: string }> {
     return this.categoriesService.create(dto);
   }
 
@@ -44,7 +55,7 @@ export class CategoriesController {
     status: 200,
     description: 'Повертає масив усіх доступних категорій',
   })
-  findAll() {
+  findAll(): Promise<Array<{ id: string; name: string }>> {
     return this.categoriesService.findAll();
   }
 
@@ -63,8 +74,37 @@ export class CategoriesController {
     status: 404,
     description: 'Категорію з таким ID не знайдено',
   })
-  findOne(@Param('id') id: string) {
+  findOne(
+    @Param('id') id: string,
+  ): Promise<{ id: string; name: string } | null> {
     return this.categoriesService.findOne(id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Оновити категорію по ID' })
+  @ApiParam({
+    name: 'id',
+    description: 'ID категорії для оновлення',
+    example: '5a9dbecc-1234-4567-89ab-abcde1234567',
+  })
+  @ApiBody({
+    type: UpdateCategoryDto,
+    examples: {
+      example1: {
+        summary: 'Оновлення назви',
+        value: { name: 'Нові гаджети' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Категорія успішно оновлена',
+  })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateCategoryDto,
+  ): Promise<{ id: string; name: string }> {
+    return this.categoriesService.update(id, dto);
   }
 
   @Delete(':id')
@@ -82,7 +122,7 @@ export class CategoriesController {
     status: 404,
     description: 'Категорія не знайдена',
   })
-  remove(@Param('id') id: string) {
+  remove(@Param('id') id: string): Promise<{ id: string; name: string }> {
     return this.categoriesService.remove(id);
   }
 }
