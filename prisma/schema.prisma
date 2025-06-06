@@ -33,9 +33,41 @@ model User {
 model Category {
   id        String   @id @default(uuid())
   name      String   @unique
-  // products  Product[] // один до багатьох
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  categoryAttributes CategoryAttribute[]
+
   @@map("categories")
+}
+
+model Attribute {
+  id        String        @id @default(uuid())
+  name      String        @unique
+  type      AttributeType // string, number, select
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  categoryAttributes CategoryAttribute[]
+
+  @@map("attributes")
+}
+
+model CategoryAttribute {
+  id String @id @default(uuid())
+
+  category   Category @relation(fields: [categoryId], references: [id])
+  categoryId String
+
+  attribute   Attribute @relation(fields: [attributeId], references: [id])
+  attributeId String
+
+  @@unique([categoryId, attributeId]) // не можна двічі одну пару
+  @@map("category_attributes")
+}
+
+enum AttributeType {
+  STRING
+  NUMBER
+  SELECT
 }
