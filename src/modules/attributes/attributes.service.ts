@@ -33,11 +33,18 @@ export class AttributesService {
     });
   }
 
-  async assignToCategory(dto: AssignAttributeDto) {
-    const { categoryId, attributeIds } = dto;
 
-    const createData = attributeIds.map(attributeId => ({
-      categoryId,
+  async assignToCategory(dto: AssignAttributeDto) {
+    // 1. Видалити старі зв’язки
+    await this.prisma.categoryAttribute.deleteMany({
+      where: {
+        categoryId: dto.categoryId,
+      },
+    });
+
+    // 2. Створити нові
+    const createData = dto.attributeIds.map(attributeId => ({
+      categoryId: dto.categoryId,
       attributeId,
     }));
 
@@ -46,6 +53,7 @@ export class AttributesService {
       skipDuplicates: true,
     });
   }
+
 
 
   async getAll() {
