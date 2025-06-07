@@ -17,14 +17,26 @@ export class CategoriesService {
     });
   }
 
-  findAll(): Promise<Array<{ id: string; name: string }>> {
-    return this.prisma.category.findMany({
-      select: {
-        id: true,
-        name: true,
+  async findAll(): Promise<Array<{ id: string; name: string; hasAttributes: boolean }>> {
+    const categories = await this.prisma.category.findMany({
+      include: {
+        categoryAttributes: {
+          select: { id: true },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     });
+
+    return categories.map(category => ({
+      id: category.id,
+      name: category.name,
+      hasAttributes: category.categoryAttributes.length > 0,
+    }));
   }
+
+
 
   findOne(id: string): Promise<{ id: string; name: string } | null> {
     return this.prisma.category.findUnique({
