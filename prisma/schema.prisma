@@ -44,7 +44,7 @@ model Category {
 model Attribute {
   id        String        @id @default(uuid())
   name      String        @unique
-  type      AttributeType // string, number, select
+  type      AttributeType
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 

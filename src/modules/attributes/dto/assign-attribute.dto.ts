@@ -1,18 +1,18 @@
-import { IsUUID } from 'class-validator';
+import { IsUUID, IsArray, ArrayNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AssignAttributeDto {
-  @ApiProperty({
-    example: 'category-uuid',
-    description: 'ID категорії',
-  })
+  @ApiProperty({ example: 'category-uuid', description: 'ID категорії' })
   @IsUUID()
   categoryId: string;
 
   @ApiProperty({
-    example: 'attribute-uuid',
-    description: 'ID атрибуту',
+    example: ['uuid1', 'uuid2'],
+    description: 'Масив ID атрибутів',
+    type: [String],
   })
-  @IsUUID()
-  attributeId: string;
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsUUID('all', { each: true })
+  attributeIds: string[];
 }

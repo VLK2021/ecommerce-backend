@@ -34,22 +34,36 @@ export class AttributesService {
   }
 
   async assignToCategory(dto: AssignAttributeDto) {
-    return this.prisma.categoryAttribute.create({
-      data: {
-        categoryId: dto.categoryId,
-        attributeId: dto.attributeId,
-      },
+    const { categoryId, attributeIds } = dto;
+
+    const createData = attributeIds.map(attributeId => ({
+      categoryId,
+      attributeId,
+    }));
+
+    return this.prisma.categoryAttribute.createMany({
+      data: createData,
+      skipDuplicates: true,
     });
   }
 
+
   async getAll() {
-    return this.prisma.attribute.findMany({
-      select: {
-        id: true,
-        name: true,
-        type: true,
+    const attributes = await this.prisma.attribute.findMany({
+      include: {
+        categoryAttributes: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     });
+
+    return attributes.map(attr => ({
+      id: attr.id,
+      name: attr.name,
+      type: attr.type,
+      assigned: attr.categoryAttributes.length > 0,
+    }));
   }
 
   async getAllByCategory(categoryId: string) {
