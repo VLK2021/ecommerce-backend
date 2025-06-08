@@ -13,6 +13,12 @@ enum Role {
   USER
 }
 
+enum AttributeType {
+  STRING
+  NUMBER
+  SELECT
+}
+
 model User {
   id                 String    @id @default(uuid())
   email              String    @unique
@@ -37,6 +43,7 @@ model Category {
   updatedAt DateTime @updatedAt
 
   categoryAttributes CategoryAttribute[]
+  products           Product[]
 
   @@map("categories")
 }
@@ -49,6 +56,7 @@ model Attribute {
   updatedAt DateTime      @updatedAt
 
   categoryAttributes CategoryAttribute[]
+  attributeValues    AttributeValue[]
 
   @@map("attributes")
 }
@@ -62,12 +70,45 @@ model CategoryAttribute {
   attribute   Attribute @relation(fields: [attributeId], references: [id])
   attributeId String
 
-  @@unique([categoryId, attributeId]) // не можна двічі одну пару
+  @@unique([categoryId, attributeId])
   @@map("category_attributes")
 }
 
-enum AttributeType {
-  STRING
-  NUMBER
-  SELECT
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Decimal
+  stock       Int      @default(0)
+  isActive    Boolean  @default(true)
+  category    Category @relation(fields: [categoryId], references: [id])
+  categoryId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  images          ProductImage[]
+  attributeValues AttributeValue[]
+
+  @@map("products")
+}
+
+model ProductImage {
+  id        String  @id @default(uuid())
+  url       String
+  isMain    Boolean @default(false)
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+
+  @@map("product_images")
+}
+
+model AttributeValue {
+  id          String    @id @default(uuid())
+  value       String
+  product     Product   @relation(fields: [productId], references: [id])
+  productId   String
+  attribute   Attribute @relation(fields: [attributeId], references: [id])
+  attributeId String
+
+  @@map("attribute_values")
 }
