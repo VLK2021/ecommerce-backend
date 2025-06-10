@@ -58,4 +58,15 @@ export class CreateProductInputDto {
   @ValidateNested({ each: true })
   @Type(() => AttributeValueInput)
   attributeValues: AttributeValueInput[];
+
+  @ApiProperty({
+    type: [String],
+    example: [
+      'https://your-s3-url/products/img1.jpg',
+      'https://your-s3-url/products/img2.jpg',
+    ],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  images: string[];
 }

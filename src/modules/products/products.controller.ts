@@ -1,14 +1,15 @@
 import {
   Controller,
   Post,
-  UploadedFiles,
-  UseInterceptors,
   Body,
   Param,
   Get,
   Delete,
   HttpCode,
-  NotFoundException, Patch,
+  NotFoundException,
+  Patch,
+  Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import {
@@ -16,71 +17,39 @@ import {
   AttributeValueInput,
 } from './dto/create-product.input';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AnyFilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { AwsService } from '../aws/aws.service';
 
 @ApiTags('Products')
 @Controller('products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly awsService: AwsService,
+  ) {}
+
+  @Get('/presign')
+  @ApiOperation({ summary: 'Отримати pre-signed URL для завантаження на S3' })
+  async getPresignedUrl(
+    @Query('filename') filename: string,
+    @Query('type') type: string,
+  ) {
+    if (!filename || !type) {
+      throw new BadRequestException('filename і type обовʼязкові');
+    }
+
+    const ext = filename.split('.').pop();
+    const key = `products/${Date.now()}-${Math.random()}.${ext}`;
+    const url = await this.awsService.generatePresignedUrl(key, type);
+
+    return { url, key };
+  }
 
   @Post()
   @ApiOperation({ summary: 'Створити продукт' })
-  @ApiConsumes('multipart/form-data')
   @ApiBody({ type: CreateProductInputDto })
-  @UseInterceptors(
-    AnyFilesInterceptor({
-      storage: diskStorage({
-        destination: './uploads/products',
-        filename: (_, file, cb) => {
-          const filename = `${Date.now()}-${Math.random()}${extname(file.originalname)}`;
-          cb(null, filename);
-        },
-      }),
-    }),
-  )
-  async create(
-    @UploadedFiles() files: Express.Multer.File[],
-    @Body() body: Record<string, string>,
-  ) {
-    const imageUrls =
-      files?.map((f) => `/uploads/products/${f.filename}`) || [];
-
-    const dto: CreateProductInputDto = {
-      name: body.name,
-      price: body.price,
-      description: body.description || undefined,
-      categoryId: body.categoryId,
-      isActive: body.isActive === 'true',
-      stock: body.stock ? parseInt(body.stock, 10) : undefined,
-      attributeValues: [],
-    };
-
-    if (typeof body.attributeValues === 'string') {
-      try {
-        const parsed: unknown = JSON.parse(body.attributeValues);
-
-        if (
-          Array.isArray(parsed) &&
-          parsed.every(
-            (item): item is AttributeValueInput =>
-              typeof item === 'object' &&
-              item !== null &&
-              typeof (item as Record<string, unknown>).attributeId ===
-                'string' &&
-              typeof (item as Record<string, unknown>).value === 'string',
-          )
-        ) {
-          dto.attributeValues = parsed;
-        }
-      } catch {
-        dto.attributeValues = [];
-      }
-    }
-
-    return this.productsService.create(dto, imageUrls);
+  async create(@Body() dto: CreateProductInputDto) {
+    return this.productsService.create(dto, dto.images || []);
   }
 
   @Patch(':id')
@@ -94,12 +63,7 @@ export class ProductsController {
   @Get()
   @ApiOperation({ summary: 'Отримати всі продукти' })
   async findAll() {
-    const products = await this.productsService.findAll();
-    return products.map((p) => ({
-      ...p,
-      price: p.price?.toString() ?? '0',
-      description: p.description ?? undefined,
-    }));
+    return this.productsService.findAll();
   }
 
   @HttpCode(200)
@@ -107,18 +71,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'Отримати продукт по ID' })
   async findOne(@Param('id') id: string) {
     const result = await this.productsService.findById(id);
-
     if (!result) {
       throw new NotFoundException(`Продукт з ID ${id} не знайдено`);
     }
-
-    const product = result;
-
-    return {
-      ...product,
-      price: product.price?.toString() ?? '0',
-      description: product.description ?? undefined,
-    };
+    return result;
   }
 
   @HttpCode(204)
