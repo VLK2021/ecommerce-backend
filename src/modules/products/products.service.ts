@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateProductInputDto } from './dto/create-product.input';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { AwsService } from '../aws/aws.service';
 
 type ProductWithRelations = Product & {
   category?: { id: string; name: string };
@@ -18,7 +19,10 @@ type ProductWithRelations = Product & {
 
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private awsService: AwsService,
+  ) {}
 
   async create(dto: CreateProductInputDto, imageUrls: string[]) {
     const { attributeValues, ...productData } = dto;
@@ -58,9 +62,20 @@ export class ProductsService {
   }
 
   async update(id: string, dto: UpdateProductDto) {
-    const { attributeValues, ...productData } = dto;
+    const {
+      attributeValues,
+      images,
+      deletedImages,
+      name,
+      price,
+      description,
+      isActive,
+      stock,
+      categoryId,
+    } = dto;
 
     try {
+      // 1. Оновити атрибути
       if (attributeValues) {
         await this.prisma.attributeValue.deleteMany({
           where: { productId: id },
@@ -75,12 +90,58 @@ export class ProductsService {
         });
       }
 
+      // 2. Видалити фото з бази і бакету
+      if (deletedImages && deletedImages.length > 0) {
+        await this.prisma.productImage.deleteMany({
+          where: {
+            productId: id,
+            url: { in: deletedImages },
+          },
+        });
+
+        for (const url of deletedImages) {
+          const key = url.split('.com/')[1];
+          if (key) {
+            await this.awsService.deleteFile(key);
+          }
+        }
+      }
+
+      // 3. Додати нові фото
+      if (images) {
+        const existing = await this.prisma.productImage.findMany({
+          where: { productId: id },
+        });
+
+        const existingUrls = existing.map((img) => img.url);
+        const newUrls = images.filter((url) => !existingUrls.includes(url));
+
+        for (let i = 0; i < newUrls.length; i++) {
+          await this.prisma.productImage.create({
+            data: {
+              productId: id,
+              url: newUrls[i],
+              isMain: i === 0,
+            },
+          });
+        }
+      }
+
+      // 4. Формування даних для оновлення
+      const updateData: Prisma.ProductUpdateInput = {};
+      if (name !== undefined) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
+      if (isActive !== undefined) updateData.isActive = isActive;
+      if (stock !== undefined) updateData.stock = stock;
+      if (price !== undefined) updateData.price = new Prisma.Decimal(price);
+      if (categoryId !== undefined) {
+        updateData.category = { connect: { id: categoryId } };
+      }
+
+      // 5. Оновлення продукту
       const updated = await this.prisma.product.update({
         where: { id },
-        data: {
-          ...productData,
-          ...(dto.price && { price: new Prisma.Decimal(dto.price) }),
-        },
+        data: updateData,
         include: {
           category: true,
           images: true,
@@ -131,7 +192,6 @@ export class ProductsService {
       });
 
       if (!product) return null;
-
       return this.formatProduct(product);
     } catch (error) {
       console.error('❌ FIND PRODUCT BY ID ERROR:', error);
@@ -141,8 +201,19 @@ export class ProductsService {
 
   async remove(id: string) {
     try {
+      const images = await this.prisma.productImage.findMany({
+        where: { productId: id },
+      });
+
       await this.prisma.attributeValue.deleteMany({ where: { productId: id } });
       await this.prisma.productImage.deleteMany({ where: { productId: id } });
+
+      for (const img of images) {
+        const key = img.url.split('.com/')[1];
+        if (key) {
+          await this.awsService.deleteFile(key);
+        }
+      }
 
       return this.prisma.product.delete({ where: { id } });
     } catch (error) {

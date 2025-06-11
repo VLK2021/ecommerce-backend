@@ -55,4 +55,30 @@ export class UpdateProductDto {
   @ValidateNested({ each: true })
   @Type(() => AttributeValueUpdateInput)
   attributeValues?: AttributeValueUpdateInput[];
+
+  @ApiProperty({
+    type: [String],
+    example: [
+      'https://your-s3-url/products/img1.jpg',
+      'https://your-s3-url/products/img2.jpg',
+    ],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+
+  @ApiProperty({
+    type: [String],
+    example: [
+      'https://your-s3-url/products/old-img1.jpg',
+      'https://your-s3-url/products/old-img2.jpg',
+    ],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  deletedImages?: string[];
 }
