@@ -12,13 +12,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
-import {
-  CreateProductInputDto,
-  AttributeValueInput,
-} from './dto/create-product.input';
+import { CreateProductInputDto } from './dto/create-product.input';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AwsService } from '../aws/aws.service';
+import { FilterProductsDto } from './dto/filter-products.dto';
 
 @ApiTags('Products')
 @Controller('products')
@@ -61,9 +59,11 @@ export class ProductsController {
 
   @HttpCode(200)
   @Get()
-  @ApiOperation({ summary: 'Отримати всі продукти' })
-  async findAll() {
-    return this.productsService.findAll();
+  @ApiOperation({
+    summary: 'Отримати всі продукти (з фільтрацією/сортуванням/пагінацією)',
+  })
+  async findAll(@Query() filter: FilterProductsDto) {
+    return this.productsService.findAll(filter);
   }
 
   @HttpCode(200)

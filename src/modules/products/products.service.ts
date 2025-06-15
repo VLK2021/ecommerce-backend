@@ -10,6 +10,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateProductInputDto } from './dto/create-product.input';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { AwsService } from '../aws/aws.service';
+import { FilterProductsDto } from './dto/filter-products.dto';
 
 type ProductWithRelations = Product & {
   category?: { id: string; name: string };
@@ -158,9 +159,31 @@ export class ProductsService {
     }
   }
 
-  async findAll() {
+  async findAll(filter: FilterProductsDto) {
     try {
+      const {
+        search,
+        categoryId,
+        sortBy = 'createdAt',
+        sortOrder = 'desc',
+        page = 1,
+        limit = 20,
+      } = filter;
+
+      const where: Prisma.ProductWhereInput = {};
+
+      if (search) {
+        where.name = { contains: search, mode: 'insensitive' };
+      }
+
+      if (categoryId) {
+        where.categoryId = categoryId;
+      }
+
+      const totalItems = await this.prisma.product.count({ where });
+
       const products = await this.prisma.product.findMany({
+        where,
         include: {
           category: true,
           images: true,
@@ -168,10 +191,19 @@ export class ProductsService {
             include: { attribute: true },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: {
+          [sortBy]: sortOrder,
+        },
+        skip: (page - 1) * limit,
+        take: limit,
       });
 
-      return products.map((product) => this.formatProduct(product));
+      return {
+        totalItems,
+        totalPages: Math.ceil(totalItems / limit),
+        currentPage: page,
+        items: products.map((product) => this.formatProduct(product)),
+      };
     } catch (error) {
       console.error('❌ FIND ALL PRODUCTS ERROR:', error);
       throw new InternalServerErrorException('Не вдалося отримати продукти');
