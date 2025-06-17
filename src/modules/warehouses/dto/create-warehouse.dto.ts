@@ -10,6 +10,10 @@ export class CreateWarehouseDto {
   @IsString()
   city: string;
 
+  @ApiProperty({ example: 'Склад техніки' })
+  @IsString()
+  description?: string;
+
   @ApiProperty({ example: 'вул. Відрадна 10' })
   @IsString()
   address: string;
