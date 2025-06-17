@@ -29,11 +29,11 @@ export class WarehousesService {
 
     const where: Prisma.WarehouseWhereInput = search
       ? {
-        name: {
-          contains: search,
-          mode: 'insensitive',
-        },
-      }
+          name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        }
       : {};
 
     const orderBy = { [sortBy]: sortOrder };
