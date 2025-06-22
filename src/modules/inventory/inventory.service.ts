@@ -9,6 +9,32 @@ export class InventoryService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateInventoryDto) {
+    // Перевіряємо, чи вже є запис для цієї пари склад+товар
+    const existing = await this.prisma.productStock.findUnique({
+      where: {
+        productId_warehouseId: {
+          productId: dto.productId,
+          warehouseId: dto.warehouseId,
+        },
+      },
+    });
+
+    if (existing) {
+      // Якщо вже є — збільшуємо кількість
+      return this.prisma.productStock.update({
+        where: {
+          productId_warehouseId: {
+            productId: dto.productId,
+            warehouseId: dto.warehouseId,
+          },
+        },
+        data: {
+          quantity: existing.quantity + dto.quantity,
+        },
+      });
+    }
+
+    // Якщо нема — створюємо новий запис
     return this.prisma.productStock.create({ data: dto });
   }
 
@@ -34,6 +60,33 @@ export class InventoryService {
       where: { id },
       data: dto,
     });
+  }
+
+  async findByWarehouseId(warehouseId: string) {
+    const stocks = await this.prisma.productStock.findMany({
+      where: { warehouseId },
+      select: {
+        id: true,
+        quantity: true,
+        product: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Повертаємо у вигляді: { id, productId, productName, quantity }
+    return stocks.map((stock) => ({
+      id: stock.id,
+      productId: stock.product.id,
+      productName: stock.product.name,
+      quantity: stock.quantity,
+      description: stock.product.description,
+    }));
   }
 
   async remove(id: string) {

@@ -35,6 +35,12 @@ export class InventoryController {
     return this.inventoryService.findOne(id);
   }
 
+  @Get('/warehouse/:warehouseId')
+  @ApiOperation({ summary: 'Залишки по конкретному складу (без зайвих полів)' })
+  findByWarehouseId(@Param('warehouseId') warehouseId: string) {
+    return this.inventoryService.findByWarehouseId(warehouseId);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Оновити склад' })
   update(@Param('id') id: string, @Body() dto: UpdateInventoryDto) {
