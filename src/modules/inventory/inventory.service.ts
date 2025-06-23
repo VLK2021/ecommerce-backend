@@ -73,6 +73,8 @@ export class InventoryService {
             id: true,
             name: true,
             description: true,
+            price: true,
+            categoryId: true,
           },
         },
       },
@@ -86,6 +88,8 @@ export class InventoryService {
       productName: stock.product.name,
       quantity: stock.quantity,
       description: stock.product.description,
+      price: stock.product.price,
+      categoryId: stock.product.categoryId,
     }));
   }
 
