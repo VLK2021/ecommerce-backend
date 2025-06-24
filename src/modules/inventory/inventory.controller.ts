@@ -6,11 +6,13 @@ import {
   Param,
   Delete,
   Patch,
+  Query,
 } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
+import { FilterInventoryDto } from '../warehouses/dto/filter-inventory.dto';
 
 @ApiTags('Inventory')
 @Controller('inventory')
@@ -36,9 +38,14 @@ export class InventoryController {
   }
 
   @Get('/warehouse/:warehouseId')
-  @ApiOperation({ summary: 'Залишки по конкретному складу (без зайвих полів)' })
-  findByWarehouseId(@Param('warehouseId') warehouseId: string) {
-    return this.inventoryService.findByWarehouseId(warehouseId);
+  @ApiOperation({
+    summary: 'Залишки по конкретному складу (фільтрація/сортування)',
+  })
+  findByWarehouseId(
+    @Param('warehouseId') warehouseId: string,
+    @Query() query: FilterInventoryDto, // DTO з усіма optional
+  ) {
+    return this.inventoryService.findByWarehouseId(warehouseId, query);
   }
 
   @Patch(':id')
