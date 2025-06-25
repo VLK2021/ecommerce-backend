@@ -136,6 +136,9 @@ export class InventoryService {
               price: true,
               categoryId: true,
               isActive: true,
+              category: {
+                select: { name: true }, // Додаємо назву категорії!
+              },
             },
           },
         },
@@ -154,11 +157,12 @@ export class InventoryService {
           description: stock.product.description,
           price: stock.product.price,
           categoryId: stock.product.categoryId,
+          categoryName: stock.product.category?.name ?? null, // Тепер є і назва категорії!
           isActive: stock.product.isActive,
         })),
         total,
         page: page ? Number(page) : 1,
-        limit: take ?? total, // якщо не вказано ліміт, повертаємо все
+        limit: take ?? total,
       };
     } catch (error) {
       console.error(error);
