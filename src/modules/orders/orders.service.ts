@@ -7,18 +7,17 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { FilterOrdersDto } from './dto/filter-orders.dto';
-import { Prisma, OrderStatus } from '@prisma/client';
+import { Prisma, OrderStatus, Order, OrderItem } from '@prisma/client';
+import { Parser } from 'json2csv';
 
 @Injectable()
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
-  // Створення нового замовлення
-  async create(dto: CreateOrderDto) {
+  // Створення замовлення
+  async create(dto: CreateOrderDto): Promise<Order & { items: OrderItem[] }> {
     try {
       const { items, ...orderData } = dto;
-
-      // Розрахунок загальної суми якщо не передано
       let totalPrice = orderData.totalPrice;
       if (!totalPrice && items?.length) {
         totalPrice = items.reduce(
@@ -26,38 +25,37 @@ export class OrdersService {
           0,
         );
       }
-
-      const itemsData = items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        price: item.price,
-        productName: item.productName,
-        productCategoryId: item.productCategoryId,
-        productCategoryName: item.productCategoryName,
-        isActive: item.isActive,
-      }));
-
-      const order = await this.prisma.order.create({
+      // Додаємо зв'язок з продуктом!
+      const itemsData: Prisma.OrderItemCreateWithoutOrderInput[] = items.map(
+        (item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          price: new Prisma.Decimal(Number(item.price)),
+          productName: item.productName,
+          productCategoryId: item.productCategoryId ?? null,
+          productCategoryName: item.productCategoryName ?? null,
+          isActive: item.isActive ?? null,
+          product: { connect: { id: item.productId } }, // обов'язково для Prisma!
+        }),
+      );
+      return await this.prisma.order.create({
         data: {
           ...orderData,
-          totalPrice,
-          items: {
-            create: itemsData,
-          },
+          userId: orderData.userId ?? undefined, // не допускай null
+          totalPrice: totalPrice
+            ? new Prisma.Decimal(Number(totalPrice))
+            : null,
+          items: { create: itemsData },
         },
-        include: {
-          items: true,
-        },
+        include: { items: true },
       });
-
-      return order;
     } catch (error) {
-      console.error('Order create error:', error);
+      console.log(error);
       throw new InternalServerErrorException('Не вдалося створити замовлення');
     }
   }
 
-  // Список усіх замовлень (з фільтрацією)
+  // Повертає всі замовлення з фільтрами
   async findAll(query: FilterOrdersDto) {
     const {
       userId,
@@ -68,7 +66,6 @@ export class OrdersService {
       page = 1,
       limit = 20,
     } = query;
-
     const where: Prisma.OrderWhereInput = {};
     if (userId) where.userId = userId;
     if (status) where.status = status as OrderStatus;
@@ -79,9 +76,7 @@ export class OrdersService {
         { customerEmail: { contains: search, mode: 'insensitive' } },
       ];
     }
-
     const total = await this.prisma.order.count({ where });
-
     const orders = await this.prisma.order.findMany({
       where,
       include: { items: true },
@@ -89,16 +84,35 @@ export class OrdersService {
       skip: (page - 1) * limit,
       take: limit,
     });
-
-    return {
-      items: orders,
-      total,
-      page,
-      limit,
-    };
+    return { items: orders, total, page, limit };
   }
 
-  // Знайти одне замовлення по id
+  // Пошук по тексту
+  async search(query: string) {
+    return this.prisma.order.findMany({
+      where: {
+        OR: [
+          { customerName: { contains: query, mode: 'insensitive' } },
+          { customerPhone: { contains: query, mode: 'insensitive' } },
+          { customerEmail: { contains: query, mode: 'insensitive' } },
+          { id: { contains: query } },
+        ],
+      },
+      include: { items: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // Повертає замовлення певного користувача (це критично для твого контролера!)
+  async findByUser(userId: string) {
+    return this.prisma.order.findMany({
+      where: { userId },
+      include: { items: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // Деталі замовлення
   async findOne(id: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -111,19 +125,108 @@ export class OrdersService {
   // Оновити замовлення
   async update(id: string, dto: UpdateOrderDto) {
     await this.findOne(id);
-
-    // Типізація, щоб не було помилок з enum
     const data: Prisma.OrderUpdateInput = {};
     if (dto.status) data.status = dto.status as OrderStatus;
     if (dto.deliveryType) data.deliveryType = dto.deliveryType;
     if (dto.deliveryData) data.deliveryData = dto.deliveryData;
     if (dto.comment) data.comment = dto.comment;
-
     return this.prisma.order.update({
       where: { id },
       data,
       include: { items: true },
     });
+  }
+
+  // Оновити тільки статус
+  async updateStatus(id: string, status: string) {
+    await this.findOne(id);
+    return this.prisma.order.update({
+      where: { id },
+      data: { status: status as OrderStatus },
+      include: { items: true },
+    });
+  }
+
+  // Додати/оновити коментар
+  async addComment(id: string, comment: string) {
+    await this.findOne(id);
+    return this.prisma.order.update({
+      where: { id },
+      data: { comment },
+      include: { items: true },
+    });
+  }
+
+  // Повертає історію статусів замовлення (OrderStatusHistory)
+  async statusHistory(id: string) {
+    return this.prisma.orderStatusHistory.findMany({
+      where: { orderId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  // Експорт замовлень
+  async exportOrders(query: FilterOrdersDto) {
+    const { items } = await this.findAll(query);
+    const parser = new Parser();
+    return parser.parse(items);
+  }
+
+  // Повторити замовлення (!!!)
+  async repeatOrder(id: string) {
+    const prevOrder = await this.findOne(id);
+    if (!prevOrder) throw new NotFoundException('Замовлення не знайдено');
+    const { items } = prevOrder;
+    return this.create({
+      userId: prevOrder.userId ?? undefined,
+      customerName: prevOrder.customerName ?? undefined,
+      customerPhone: prevOrder.customerPhone ?? undefined,
+      customerEmail: prevOrder.customerEmail ?? undefined,
+      deliveryType: prevOrder.deliveryType ?? undefined,
+      deliveryData:
+        typeof prevOrder.deliveryData === 'object' &&
+        prevOrder.deliveryData !== null &&
+        !Array.isArray(prevOrder.deliveryData)
+          ? prevOrder.deliveryData
+          : undefined,
+      comment: prevOrder.comment ?? undefined,
+      totalPrice: prevOrder.totalPrice
+        ? Number(prevOrder.totalPrice)
+        : undefined,
+      items: items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: Number(item.price),
+        productName: item.productName,
+        productCategoryId: item.productCategoryId ?? undefined,
+        productCategoryName: item.productCategoryName ?? undefined,
+        isActive: item.isActive ?? undefined,
+      })),
+    });
+  }
+
+  // Загальна статистика
+  async getStats() {
+    const total = await this.prisma.order.count();
+    const totalPrice = await this.prisma.order.aggregate({
+      _sum: { totalPrice: true },
+    });
+    const byStatus = await this.prisma.order.groupBy({
+      by: ['status'],
+      _count: { status: true },
+      _sum: { totalPrice: true },
+    });
+    return {
+      totalOrders: total,
+      totalSum: totalPrice._sum.totalPrice ?? 0,
+      byStatus,
+    };
+  }
+
+  // Інвойс (HTML)
+  async invoice(id: string) {
+    const order = await this.findOne(id);
+    return `<h1>Інвойс для замовлення ${order.id}</h1>`;
   }
 
   // Видалити замовлення
