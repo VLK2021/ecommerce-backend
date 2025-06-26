@@ -9,6 +9,9 @@ import { AttributesModule } from './modules/attributes/attributes.module';
 import { ProductsModule } from './modules/products/products.module';
 import { WarehousesModule } from './modules/warehouses/warehouses.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { OrdersModule } from './modules/orders/orders.module';
+import { OrderStatusHistoryModule } from './modules/order-status-history/order-status-history.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -21,6 +24,9 @@ import { InventoryModule } from './modules/inventory/inventory.module';
     ProductsModule,
     WarehousesModule,
     InventoryModule,
+    OrdersModule,
+    OrderStatusHistoryModule,
+    PaymentsModule,
   ],
 })
 export class AppModule {}

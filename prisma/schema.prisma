@@ -19,6 +19,16 @@ enum AttributeType {
   SELECT
 }
 
+// Новий ENUM для провайдерів платежів
+enum PaymentProvider {
+  LIQPAY
+  PAYPAL
+  MONOBANK
+  CASH
+  CARD
+  STRIPE
+}
+
 model User {
   id                 String    @id @default(uuid())
   email              String    @unique
@@ -32,6 +42,7 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   hashedRefreshToken String?
+  Order              Order[]
 
   @@map("users")
 }
@@ -89,6 +100,7 @@ model Product {
   images          ProductImage[]
   attributeValues AttributeValue[]
   ProductStock    ProductStock[]
+  OrderItem       OrderItem[]
 
   @@map("products")
 }
@@ -143,4 +155,105 @@ model ProductStock {
 
   @@unique([productId, warehouseId])
   @@map("product_stocks")
+}
+
+// -------------------------
+// Додаємо нові енумки для статусів
+// -------------------------
+
+enum OrderStatus {
+  NEW
+  PROCESSING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  IN_TRANSIT
+  DELIVERED
+  RETURNED
+  CANCELLED
+}
+
+// -------------------------
+// Нові моделі для замовлень, історії, оплат
+// -------------------------
+
+model Order {
+  id             String               @id @default(uuid())
+  userId         String?
+  user           User?                @relation(fields: [userId], references: [id])
+  customerName   String?
+  customerPhone  String?
+  customerEmail  String?
+  deliveryType   String?
+  deliveryData   Json?
+  status         OrderStatus          @default(NEW)
+  paymentStatus  PaymentStatus        @default(PENDING)
+  deliveryStatus DeliveryStatus       @default(PENDING)
+  comment        String?
+  totalPrice     Decimal?
+  currency       String?
+  items          OrderItem[]
+  payment        Payment[]
+  statusHistory  OrderStatusHistory[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id                  String   @id @default(uuid())
+  orderId             String
+  order               Order    @relation(fields: [orderId], references: [id])
+  productId           String
+  product             Product  @relation(fields: [productId], references: [id])
+  quantity            Int
+  price               Decimal
+  productName         String
+  productCategoryId   String?
+  productCategoryName String?
+  isActive            Boolean?
+
+  @@map("order_items")
+}
+
+model Payment {
+  id         String          @id @default(uuid())
+  orderId    String
+  order      Order           @relation(fields: [orderId], references: [id])
+  amount     Decimal
+  status     PaymentStatus
+  provider   PaymentProvider
+  method     String?
+  externalId String?
+  paidAt     DateTime?
+  createdAt  DateTime        @default(now())
+  currency   String?
+
+  @@map("payments")
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id])
+  status    OrderStatus
+  comment   String?
+  createdAt DateTime    @default(now())
+
+  @@map("order_status_history")
 }
