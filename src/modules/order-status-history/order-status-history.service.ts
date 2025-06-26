@@ -8,6 +8,7 @@ import { OrderStatus } from '@prisma/client';
 export class OrderStatusHistoryService {
   constructor(private prisma: PrismaService) {}
 
+  // Додати новий статус
   async create(dto: CreateOrderStatusInput) {
     return this.prisma.orderStatusHistory.create({
       data: {
@@ -18,6 +19,7 @@ export class OrderStatusHistoryService {
     });
   }
 
+  // Отримати всі з фільтрацією
   async findAll(query: FilterOrderStatusInput) {
     const { orderId, status, page = 1, limit = 20 } = query;
     const where: {
@@ -28,7 +30,6 @@ export class OrderStatusHistoryService {
     if (status) where.status = status;
 
     const total = await this.prisma.orderStatusHistory.count({ where });
-
     const items = await this.prisma.orderStatusHistory.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -39,11 +40,35 @@ export class OrderStatusHistoryService {
     return { items, total, page, limit };
   }
 
+  // По id
   async findOne(id: string) {
     const item = await this.prisma.orderStatusHistory.findUnique({
       where: { id },
     });
     if (!item) throw new NotFoundException('Статус не знайдено');
     return item;
+  }
+
+  // Вся історія по замовленню
+  async findByOrder(orderId: string) {
+    return this.prisma.orderStatusHistory.findMany({
+      where: { orderId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  // Оновити коментар
+  async updateComment(id: string, comment?: string) {
+    await this.findOne(id); // Якщо не знайде — кине NotFoundException
+    return this.prisma.orderStatusHistory.update({
+      where: { id },
+      data: { comment },
+    });
+  }
+
+  // Видалити статус
+  async remove(id: string) {
+    await this.findOne(id);
+    return this.prisma.orderStatusHistory.delete({ where: { id } });
   }
 }
