@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -14,7 +15,7 @@ import { Parser } from 'json2csv';
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
-  // Створення замовлення
+  // Створення замовлення з перевіркою залишків і детальною відповіддю
   async create(dto: CreateOrderDto): Promise<Order & { items: OrderItem[] }> {
     try {
       const { items, ...orderData } = dto;
@@ -25,32 +26,90 @@ export class OrdersService {
           0,
         );
       }
-      // Додаємо зв'язок з продуктом!
-      const itemsData: Prisma.OrderItemCreateWithoutOrderInput[] = items.map(
-        (item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          price: new Prisma.Decimal(Number(item.price)),
-          productName: item.productName,
-          productCategoryId: item.productCategoryId ?? null,
-          productCategoryName: item.productCategoryName ?? null,
-          isActive: item.isActive ?? null,
-          product: { connect: { id: item.productId } }, // обов'язково для Prisma!
-        }),
-      );
-      return await this.prisma.order.create({
-        data: {
-          ...orderData,
-          userId: orderData.userId ?? undefined, // не допускай null
-          totalPrice: totalPrice
-            ? new Prisma.Decimal(Number(totalPrice))
-            : null,
-          items: { create: itemsData },
+
+      // --- Перевірка залишків перед транзакцією ---
+      const insufficient: {
+        productId: string;
+        productName?: string;
+        requested: number;
+        available: number;
+      }[] = [];
+
+      const productIds = items.map((item) => item.productId);
+      const stocks = await this.prisma.productStock.findMany({
+        where: {
+          productId: { in: productIds },
         },
-        include: { items: true },
+        select: {
+          productId: true,
+          quantity: true,
+          product: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
+
+      for (const item of items) {
+        const found = stocks.find((s) => s.productId === item.productId);
+        if (!found || found.quantity < item.quantity) {
+          insufficient.push({
+            productId: item.productId,
+            productName: found?.product?.name || item.productName || '',
+            requested: item.quantity,
+            available: found?.quantity ?? 0,
+          });
+        }
+      }
+
+      if (insufficient.length) {
+        throw new BadRequestException({
+          message: 'Недостатньо товару для деяких позицій',
+          insufficient,
+        });
+      }
+
+      // --- Якщо всі ок, створюємо замовлення і списуємо ---
+      return await this.prisma.$transaction(async (tx) => {
+        const itemsData: Prisma.OrderItemCreateWithoutOrderInput[] = items.map(
+          (item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            price: new Prisma.Decimal(Number(item.price)),
+            productName: item.productName,
+            productCategoryId: item.productCategoryId ?? null,
+            productCategoryName: item.productCategoryName ?? null,
+            isActive: item.isActive ?? null,
+            product: { connect: { id: item.productId } },
+          }),
+        );
+
+        const createdOrder = await tx.order.create({
+          data: {
+            ...orderData,
+            userId: orderData.userId ?? undefined,
+            totalPrice: totalPrice
+              ? new Prisma.Decimal(Number(totalPrice))
+              : null,
+            items: { create: itemsData },
+          },
+          include: { items: true },
+        });
+
+        // Списуємо залишки
+        for (const item of items) {
+          await tx.productStock.updateMany({
+            where: { productId: item.productId },
+            data: { quantity: { decrement: item.quantity } },
+          });
+        }
+
+        return createdOrder;
       });
     } catch (error) {
-      console.log(error);
+      if (error instanceof BadRequestException) throw error;
+      console.error(error);
       throw new InternalServerErrorException('Не вдалося створити замовлення');
     }
   }
@@ -103,7 +162,7 @@ export class OrdersService {
     });
   }
 
-  // Повертає замовлення певного користувача (це критично для твого контролера!)
+  // Повертає замовлення певного користувача
   async findByUser(userId: string) {
     return this.prisma.order.findMany({
       where: { userId },
@@ -172,7 +231,7 @@ export class OrdersService {
     return parser.parse(items);
   }
 
-  // Повторити замовлення (!!!)
+  // Повторити замовлення
   async repeatOrder(id: string) {
     const prevOrder = await this.findOne(id);
     if (!prevOrder) throw new NotFoundException('Замовлення не знайдено');
