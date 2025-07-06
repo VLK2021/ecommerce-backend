@@ -72,9 +72,9 @@ export class OrdersService {
 
       // --- Якщо всі ок, створюємо замовлення і списуємо ---
       return await this.prisma.$transaction(async (tx) => {
+        // Виправлення! НЕ треба дублювати productId як поле, тільки product: { connect: { id } }
         const itemsData: Prisma.OrderItemCreateWithoutOrderInput[] = items.map(
           (item) => ({
-            productId: item.productId,
             quantity: item.quantity,
             price: new Prisma.Decimal(Number(item.price)),
             productName: item.productName,
