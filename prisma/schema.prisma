@@ -215,6 +215,7 @@ enum DeliveryStatus {
 
 model Order {
   id             String               @id @default(uuid())
+  orderNumber    Int                  @unique
   userId         String?
   user           User?                @relation(fields: [userId], references: [id])
   customerName   String?

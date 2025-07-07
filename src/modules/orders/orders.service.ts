@@ -72,7 +72,14 @@ export class OrdersService {
 
       // --- Якщо всі ок, створюємо замовлення і списуємо ---
       return await this.prisma.$transaction(async (tx) => {
-        // Виправлення! НЕ треба дублювати productId як поле, тільки product: { connect: { id } }
+        // ---- Знаходимо останній orderNumber ----
+        const lastOrder = await tx.order.findFirst({
+          orderBy: { orderNumber: 'desc' },
+          select: { orderNumber: true },
+        });
+        const nextOrderNumber = (lastOrder?.orderNumber || 0) + 1;
+
+        // ---- Створюємо OrderItem-дані ----
         const itemsData: Prisma.OrderItemCreateWithoutOrderInput[] = items.map(
           (item) => ({
             quantity: item.quantity,
@@ -85,9 +92,11 @@ export class OrdersService {
           }),
         );
 
+        // ---- Створення самого ордера ----
         const createdOrder = await tx.order.create({
           data: {
             ...orderData,
+            orderNumber: nextOrderNumber,
             userId: orderData.userId ?? undefined,
             totalPrice: totalPrice
               ? new Prisma.Decimal(Number(totalPrice))
@@ -97,7 +106,7 @@ export class OrdersService {
           include: { items: true },
         });
 
-        // Списуємо залишки
+        // ---- Списуємо залишки ----
         for (const item of items) {
           await tx.productStock.updateMany({
             where: { productId: item.productId },
@@ -146,7 +155,7 @@ export class OrdersService {
     return { items: orders, total, page, limit };
   }
 
-  // Пошук по тексту
+  // Далі — БЕЗ ЗМІН (всі методи: search, findByUser, findOne, update, ... і т.д.)
   async search(query: string) {
     return this.prisma.order.findMany({
       where: {
@@ -162,7 +171,6 @@ export class OrdersService {
     });
   }
 
-  // Повертає замовлення певного користувача
   async findByUser(userId: string) {
     return this.prisma.order.findMany({
       where: { userId },
@@ -171,7 +179,6 @@ export class OrdersService {
     });
   }
 
-  // Деталі замовлення
   async findOne(id: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -181,7 +188,6 @@ export class OrdersService {
     return order;
   }
 
-  // Оновити замовлення
   async update(id: string, dto: UpdateOrderDto) {
     await this.findOne(id);
     const data: Prisma.OrderUpdateInput = {};
@@ -196,7 +202,6 @@ export class OrdersService {
     });
   }
 
-  // Оновити тільки статус
   async updateStatus(id: string, status: string) {
     await this.findOne(id);
     return this.prisma.order.update({
@@ -206,7 +211,6 @@ export class OrdersService {
     });
   }
 
-  // Додати/оновити коментар
   async addComment(id: string, comment: string) {
     await this.findOne(id);
     return this.prisma.order.update({
@@ -216,7 +220,6 @@ export class OrdersService {
     });
   }
 
-  // Повертає історію статусів замовлення (OrderStatusHistory)
   async statusHistory(id: string) {
     return this.prisma.orderStatusHistory.findMany({
       where: { orderId: id },
@@ -224,14 +227,12 @@ export class OrdersService {
     });
   }
 
-  // Експорт замовлень
   async exportOrders(query: FilterOrdersDto) {
     const { items } = await this.findAll(query);
     const parser = new Parser();
     return parser.parse(items);
   }
 
-  // Повторити замовлення
   async repeatOrder(id: string) {
     const prevOrder = await this.findOne(id);
     if (!prevOrder) throw new NotFoundException('Замовлення не знайдено');
@@ -264,7 +265,6 @@ export class OrdersService {
     });
   }
 
-  // Загальна статистика
   async getStats() {
     const total = await this.prisma.order.count();
     const totalPrice = await this.prisma.order.aggregate({
@@ -282,13 +282,11 @@ export class OrdersService {
     };
   }
 
-  // Інвойс (HTML)
   async invoice(id: string) {
     const order = await this.findOne(id);
     return `<h1>Інвойс для замовлення ${order.id}</h1>`;
   }
 
-  // Видалити замовлення
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.order.delete({ where: { id } });

@@ -3,6 +3,10 @@ import { OrderItemOutputDto } from './order-item.output';
 
 export class OrderOutputDto {
   @ApiProperty({ example: 'order-uuid' }) id: string;
+
+  @ApiProperty({ example: 101 }) // Додаємо опис orderNumber
+  orderNumber: number;
+
   @ApiProperty({ example: 'user-uuid', required: false }) userId?: string;
   @ApiProperty({ example: 'Іван Петренко', required: false })
   customerName?: string;
