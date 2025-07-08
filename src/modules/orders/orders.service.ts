@@ -202,8 +202,31 @@ export class OrdersService {
     });
   }
 
+  // async updateStatus(id: string, status: string) {
+  //   await this.findOne(id);
+  //   return this.prisma.order.update({
+  //     where: { id },
+  //     data: { status: status as OrderStatus },
+  //     include: { items: true },
+  //   });
+  // }
+
   async updateStatus(id: string, status: string) {
-    await this.findOne(id);
+    const order = await this.findOne(id);
+
+    // Повертаємо залишки, якщо скасовується/повертається
+    if (
+      (status === 'CANCELLED' || status === 'RETURNED') &&
+      order.status !== status
+    ) {
+      for (const item of order.items) {
+        await this.prisma.productStock.updateMany({
+          where: { productId: item.productId },
+          data: { quantity: { increment: item.quantity } },
+        });
+      }
+    }
+
     return this.prisma.order.update({
       where: { id },
       data: { status: status as OrderStatus },
