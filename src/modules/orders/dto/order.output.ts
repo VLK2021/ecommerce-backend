@@ -3,10 +3,7 @@ import { OrderItemOutputDto } from './order-item.output';
 
 export class OrderOutputDto {
   @ApiProperty({ example: 'order-uuid' }) id: string;
-
-  @ApiProperty({ example: 101 }) // Додаємо опис orderNumber
-  orderNumber: number;
-
+  @ApiProperty({ example: 101 }) orderNumber: number;
   @ApiProperty({ example: 'user-uuid', required: false }) userId?: string;
   @ApiProperty({ example: 'Іван Петренко', required: false })
   customerName?: string;
@@ -16,19 +13,17 @@ export class OrderOutputDto {
   customerEmail?: string;
   @ApiProperty({ example: 'nova_poshta', required: false })
   deliveryType?: string;
+
   @ApiProperty({
     example: { city: 'Львів', warehouse: '23' },
     required: false,
     type: Object,
   })
   deliveryData?: Record<string, any>;
-  @ApiProperty({ example: 'Дзвінок перед доставкою!', required: false })
+
+  @ApiProperty({ example: 'Буду вдома після 19:00', required: false })
   comment?: string;
   @ApiProperty({ example: '799.00', required: false }) totalPrice?: string;
 
-  @ApiProperty({
-    type: [OrderItemOutputDto],
-    description: 'Масив товарів у замовленні',
-  })
-  items: OrderItemOutputDto[];
+  @ApiProperty({ type: [OrderItemOutputDto] }) items: OrderItemOutputDto[];
 }

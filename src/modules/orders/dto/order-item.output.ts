@@ -11,4 +11,8 @@ export class OrderItemOutputDto {
   @ApiProperty({ example: 'Велосипеди', required: false })
   productCategoryName?: string;
   @ApiProperty({ example: true, required: false }) isActive?: boolean;
+
+  @ApiProperty({ example: 'warehouse-uuid' }) warehouseId: string;
+  @ApiProperty({ example: 'Основний склад', required: false })
+  warehouseName?: string;
 }

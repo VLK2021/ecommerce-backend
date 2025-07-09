@@ -4,22 +4,23 @@ import {
   InternalServerErrorException,
   BadRequestException,
 } from '@nestjs/common';
+import { Parser } from 'json2csv';
+import { Prisma, OrderStatus } from '@prisma/client';
+
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { FilterOrdersDto } from './dto/filter-orders.dto';
-import { Prisma, OrderStatus, Order, OrderItem } from '@prisma/client';
-import { Parser } from 'json2csv';
 
 @Injectable()
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
-  // Створення замовлення з перевіркою залишків і детальною відповіддю
-  async create(dto: CreateOrderDto): Promise<Order & { items: OrderItem[] }> {
+  async create(dto: CreateOrderDto) {
     try {
       const { items, ...orderData } = dto;
       let totalPrice = orderData.totalPrice;
+
       if (!totalPrice && items?.length) {
         totalPrice = items.reduce(
           (sum, item) => sum + Number(item.price) * item.quantity,
@@ -27,36 +28,39 @@ export class OrdersService {
         );
       }
 
-      // --- Перевірка залишків перед транзакцією ---
+      // Перевірка залишків
+      const stocks = await this.prisma.productStock.findMany({
+        where: {
+          OR: items.map((item) => ({
+            productId: item.productId,
+            warehouseId: item.warehouseId,
+          })),
+        },
+        select: {
+          productId: true,
+          warehouseId: true,
+          quantity: true,
+          product: { select: { name: true } },
+        },
+      });
+
       const insufficient: {
         productId: string;
-        productName?: string;
+        productName: string;
         requested: number;
         available: number;
       }[] = [];
 
-      const productIds = items.map((item) => item.productId);
-      const stocks = await this.prisma.productStock.findMany({
-        where: {
-          productId: { in: productIds },
-        },
-        select: {
-          productId: true,
-          quantity: true,
-          product: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      });
-
       for (const item of items) {
-        const found = stocks.find((s) => s.productId === item.productId);
+        const found = stocks.find(
+          (s) =>
+            s.productId === item.productId &&
+            s.warehouseId === item.warehouseId,
+        );
         if (!found || found.quantity < item.quantity) {
           insufficient.push({
             productId: item.productId,
-            productName: found?.product?.name || item.productName || '',
+            productName: found?.product.name || item.productName || '',
             requested: item.quantity,
             available: found?.quantity ?? 0,
           });
@@ -70,50 +74,57 @@ export class OrdersService {
         });
       }
 
-      // --- Якщо всі ок, створюємо замовлення і списуємо ---
       return await this.prisma.$transaction(async (tx) => {
-        // ---- Знаходимо останній orderNumber ----
         const lastOrder = await tx.order.findFirst({
           orderBy: { orderNumber: 'desc' },
           select: { orderNumber: true },
         });
         const nextOrderNumber = (lastOrder?.orderNumber || 0) + 1;
 
-        // ---- Створюємо OrderItem-дані ----
-        const itemsData: Prisma.OrderItemCreateWithoutOrderInput[] = items.map(
-          (item) => ({
-            quantity: item.quantity,
-            price: new Prisma.Decimal(Number(item.price)),
-            productName: item.productName,
-            productCategoryId: item.productCategoryId ?? null,
-            productCategoryName: item.productCategoryName ?? null,
-            isActive: item.isActive ?? null,
-            product: { connect: { id: item.productId } },
-          }),
-        );
+        const itemsData = items.map((item) => ({
+          quantity: item.quantity,
+          price: new Prisma.Decimal(item.price),
+          productName: item.productName,
+          productCategoryId: item.productCategoryId ?? null,
+          productCategoryName: item.productCategoryName ?? null,
+          isActive: item.isActive ?? null,
+          productId: item.productId,
+          warehouseId: item.warehouseId,
+        }));
 
-        // ---- Створення самого ордера ----
         const createdOrder = await tx.order.create({
           data: {
             ...orderData,
             orderNumber: nextOrderNumber,
-            userId: orderData.userId ?? undefined,
-            totalPrice: totalPrice
-              ? new Prisma.Decimal(Number(totalPrice))
-              : null,
+            totalPrice: totalPrice ? new Prisma.Decimal(totalPrice) : null,
             items: { create: itemsData },
+            ...(orderData.userId ? { userId: orderData.userId } : {}),
           },
-          include: { items: true },
+          include: {
+            items: {
+              include: {
+                product: true,
+                warehouse: true,
+              },
+            },
+            warehouse: true,
+            user: true,
+            payment: true,
+            statusHistory: true,
+          },
         });
 
-        // ---- Списуємо залишки ----
         for (const item of items) {
           await tx.productStock.updateMany({
-            where: { productId: item.productId },
-            data: { quantity: { decrement: item.quantity } },
+            where: {
+              productId: item.productId,
+              warehouseId: item.warehouseId,
+            },
+            data: {
+              quantity: { decrement: item.quantity },
+            },
           });
         }
-
         return createdOrder;
       });
     } catch (error) {
@@ -123,10 +134,10 @@ export class OrdersService {
     }
   }
 
-  // Повертає всі замовлення з фільтрами
   async findAll(query: FilterOrdersDto) {
     const {
       userId,
+      warehouseId,
       search,
       status,
       sortBy = 'createdAt',
@@ -134,8 +145,10 @@ export class OrdersService {
       page = 1,
       limit = 20,
     } = query;
+
     const where: Prisma.OrderWhereInput = {};
     if (userId) where.userId = userId;
+    if (warehouseId) where.warehouseId = warehouseId;
     if (status) where.status = status as OrderStatus;
     if (search) {
       where.OR = [
@@ -144,18 +157,69 @@ export class OrdersService {
         { customerEmail: { contains: search, mode: 'insensitive' } },
       ];
     }
+
     const total = await this.prisma.order.count({ where });
     const orders = await this.prisma.order.findMany({
       where,
-      include: { items: true },
+      include: {
+        items: {
+          include: {
+            product: true,
+            warehouse: true,
+          },
+        },
+        warehouse: true,
+        user: true,
+        payment: true,
+        statusHistory: true,
+      },
       orderBy: { [sortBy]: sortOrder },
       skip: (page - 1) * limit,
       take: limit,
     });
+
     return { items: orders, total, page, limit };
   }
 
-  // Далі — БЕЗ ЗМІН (всі методи: search, findByUser, findOne, update, ... і т.д.)
+  async findOne(id: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: {
+            product: true,
+            warehouse: true,
+          },
+        },
+        warehouse: true,
+        user: true,
+        payment: true,
+        statusHistory: true,
+      },
+    });
+    if (!order) throw new NotFoundException('Замовлення не знайдено');
+    return order;
+  }
+
+  async findByUser(userId: string) {
+    return this.prisma.order.findMany({
+      where: { userId },
+      include: {
+        items: {
+          include: {
+            product: true,
+            warehouse: true,
+          },
+        },
+        warehouse: true,
+        user: true,
+        payment: true,
+        statusHistory: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async search(query: string) {
     return this.prisma.order.findMany({
       where: {
@@ -166,26 +230,20 @@ export class OrdersService {
           { id: { contains: query } },
         ],
       },
-      include: { items: true },
+      include: {
+        items: {
+          include: {
+            product: true,
+            warehouse: true,
+          },
+        },
+        warehouse: true,
+        user: true,
+        payment: true,
+        statusHistory: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
-  }
-
-  async findByUser(userId: string) {
-    return this.prisma.order.findMany({
-      where: { userId },
-      include: { items: true },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async findOne(id: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id },
-      include: { items: true },
-    });
-    if (!order) throw new NotFoundException('Замовлення не знайдено');
-    return order;
   }
 
   async update(id: string, dto: UpdateOrderDto) {
@@ -195,33 +253,38 @@ export class OrdersService {
     if (dto.deliveryType) data.deliveryType = dto.deliveryType;
     if (dto.deliveryData) data.deliveryData = dto.deliveryData;
     if (dto.comment) data.comment = dto.comment;
+
     return this.prisma.order.update({
       where: { id },
       data,
-      include: { items: true },
+      include: {
+        items: {
+          include: {
+            product: true,
+            warehouse: true,
+          },
+        },
+        warehouse: true,
+        user: true,
+        payment: true,
+        statusHistory: true,
+      },
     });
   }
-
-  // async updateStatus(id: string, status: string) {
-  //   await this.findOne(id);
-  //   return this.prisma.order.update({
-  //     where: { id },
-  //     data: { status: status as OrderStatus },
-  //     include: { items: true },
-  //   });
-  // }
 
   async updateStatus(id: string, status: string) {
     const order = await this.findOne(id);
 
-    // Повертаємо залишки, якщо скасовується/повертається
     if (
       (status === 'CANCELLED' || status === 'RETURNED') &&
       order.status !== status
     ) {
       for (const item of order.items) {
         await this.prisma.productStock.updateMany({
-          where: { productId: item.productId },
+          where: {
+            productId: item.productId,
+            warehouseId: item.warehouseId,
+          },
           data: { quantity: { increment: item.quantity } },
         });
       }
@@ -230,7 +293,18 @@ export class OrdersService {
     return this.prisma.order.update({
       where: { id },
       data: { status: status as OrderStatus },
-      include: { items: true },
+      include: {
+        items: {
+          include: {
+            product: true,
+            warehouse: true,
+          },
+        },
+        warehouse: true,
+        user: true,
+        payment: true,
+        statusHistory: true,
+      },
     });
   }
 
@@ -239,7 +313,18 @@ export class OrdersService {
     return this.prisma.order.update({
       where: { id },
       data: { comment },
-      include: { items: true },
+      include: {
+        items: {
+          include: {
+            product: true,
+            warehouse: true,
+          },
+        },
+        warehouse: true,
+        user: true,
+        payment: true,
+        statusHistory: true,
+      },
     });
   }
 
@@ -258,7 +343,6 @@ export class OrdersService {
 
   async repeatOrder(id: string) {
     const prevOrder = await this.findOne(id);
-    if (!prevOrder) throw new NotFoundException('Замовлення не знайдено');
     const { items } = prevOrder;
     return this.create({
       userId: prevOrder.userId ?? undefined,
@@ -276,6 +360,7 @@ export class OrdersService {
       totalPrice: prevOrder.totalPrice
         ? Number(prevOrder.totalPrice)
         : undefined,
+      warehouseId: prevOrder.warehouseId,
       items: items.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
@@ -284,6 +369,7 @@ export class OrdersService {
         productCategoryId: item.productCategoryId ?? undefined,
         productCategoryName: item.productCategoryName ?? undefined,
         isActive: item.isActive ?? undefined,
+        warehouseId: item.warehouseId,
       })),
     });
   }

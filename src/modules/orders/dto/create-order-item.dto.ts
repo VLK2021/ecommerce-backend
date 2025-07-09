@@ -6,6 +6,10 @@ export class CreateOrderItemDto {
   @IsString()
   productId: string;
 
+  @ApiProperty({ example: 'warehouse-uuid', description: 'ID складу' })
+  @IsString()
+  warehouseId: string;
+
   @ApiProperty({ example: 2, description: 'Кількість' })
   @IsNumber()
   quantity: number;

@@ -18,6 +18,11 @@ export class FilterOrdersDto {
   @IsString()
   search?: string;
 
+  @ApiPropertyOptional({ example: 'warehouse-uuid' })
+  @IsOptional()
+  @IsString()
+  warehouseId?: string;
+
   @ApiPropertyOptional({ example: 'createdAt' })
   @IsOptional()
   @IsString()

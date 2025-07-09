@@ -16,6 +16,10 @@ export class CreateOrderDto {
   @IsString()
   userId?: string;
 
+  @ApiProperty({ example: 'warehouse-uuid', description: 'ID складу' })
+  @IsString()
+  warehouseId: string;
+
   @ApiPropertyOptional({ example: 'Іван Петренко' })
   @IsOptional()
   @IsString()

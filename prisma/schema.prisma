@@ -138,6 +138,8 @@ model Warehouse {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   ProductStock ProductStock[]
+  OrderItem    OrderItem[]
+  Order        Order[]
 
   @@map("warehouses")
 }
@@ -214,14 +216,17 @@ enum DeliveryStatus {
 // -------------------------
 
 model Order {
-  id             String               @id @default(uuid())
-  orderNumber    Int                  @unique
-  userId         String?
-  user           User?                @relation(fields: [userId], references: [id])
-  customerName   String?
-  customerPhone  String?
-  customerEmail  String?
-  deliveryType   String?
+  id            String    @id @default(uuid())
+  orderNumber   Int       @unique
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id])
+  customerName  String?
+  customerPhone String?
+  customerEmail String?
+  deliveryType  String?
+  warehouseId   String
+  warehouse     Warehouse @relation(fields: [warehouseId], references: [id])
+
   deliveryData   Json?
   status         OrderStatus          @default(NEW)
   paymentStatus  PaymentStatus        @default(PENDING)
@@ -239,11 +244,13 @@ model Order {
 }
 
 model OrderItem {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   orderId             String
-  order               Order    @relation(fields: [orderId], references: [id])
+  order               Order     @relation(fields: [orderId], references: [id])
   productId           String
-  product             Product  @relation(fields: [productId], references: [id])
+  product             Product   @relation(fields: [productId], references: [id])
+  warehouseId         String
+  warehouse           Warehouse @relation(fields: [warehouseId], references: [id])
   quantity            Int
   price               Decimal
   productName         String
