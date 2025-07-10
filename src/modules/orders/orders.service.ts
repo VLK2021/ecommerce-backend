@@ -18,7 +18,7 @@ export class OrdersService {
 
   async create(dto: CreateOrderDto) {
     try {
-      const { items, ...orderData } = dto;
+      const { items, paymentType, ...orderData } = dto;
       let totalPrice = orderData.totalPrice;
 
       if (!totalPrice && items?.length) {
@@ -98,15 +98,11 @@ export class OrdersService {
             orderNumber: nextOrderNumber,
             totalPrice: totalPrice ? new Prisma.Decimal(totalPrice) : null,
             items: { create: itemsData },
+            paymentType: paymentType ?? null,
             ...(orderData.userId ? { userId: orderData.userId } : {}),
           },
           include: {
-            items: {
-              include: {
-                product: true,
-                warehouse: true,
-              },
-            },
+            items: { include: { product: true, warehouse: true } },
             warehouse: true,
             user: true,
             payment: true,
@@ -162,12 +158,7 @@ export class OrdersService {
     const orders = await this.prisma.order.findMany({
       where,
       include: {
-        items: {
-          include: {
-            product: true,
-            warehouse: true,
-          },
-        },
+        items: { include: { product: true, warehouse: true } },
         warehouse: true,
         user: true,
         payment: true,
@@ -185,12 +176,7 @@ export class OrdersService {
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: {
-        items: {
-          include: {
-            product: true,
-            warehouse: true,
-          },
-        },
+        items: { include: { product: true, warehouse: true } },
         warehouse: true,
         user: true,
         payment: true,
@@ -205,12 +191,7 @@ export class OrdersService {
     return this.prisma.order.findMany({
       where: { userId },
       include: {
-        items: {
-          include: {
-            product: true,
-            warehouse: true,
-          },
-        },
+        items: { include: { product: true, warehouse: true } },
         warehouse: true,
         user: true,
         payment: true,
@@ -231,12 +212,7 @@ export class OrdersService {
         ],
       },
       include: {
-        items: {
-          include: {
-            product: true,
-            warehouse: true,
-          },
-        },
+        items: { include: { product: true, warehouse: true } },
         warehouse: true,
         user: true,
         payment: true,
@@ -253,17 +229,13 @@ export class OrdersService {
     if (dto.deliveryType) data.deliveryType = dto.deliveryType;
     if (dto.deliveryData) data.deliveryData = dto.deliveryData;
     if (dto.comment) data.comment = dto.comment;
+    if (dto.paymentType) data.paymentType = dto.paymentType; // --- тут
 
     return this.prisma.order.update({
       where: { id },
       data,
       include: {
-        items: {
-          include: {
-            product: true,
-            warehouse: true,
-          },
-        },
+        items: { include: { product: true, warehouse: true } },
         warehouse: true,
         user: true,
         payment: true,
@@ -294,12 +266,7 @@ export class OrdersService {
       where: { id },
       data: { status: status as OrderStatus },
       include: {
-        items: {
-          include: {
-            product: true,
-            warehouse: true,
-          },
-        },
+        items: { include: { product: true, warehouse: true } },
         warehouse: true,
         user: true,
         payment: true,
@@ -314,12 +281,7 @@ export class OrdersService {
       where: { id },
       data: { comment },
       include: {
-        items: {
-          include: {
-            product: true,
-            warehouse: true,
-          },
-        },
+        items: { include: { product: true, warehouse: true } },
         warehouse: true,
         user: true,
         payment: true,
@@ -361,6 +323,7 @@ export class OrdersService {
         ? Number(prevOrder.totalPrice)
         : undefined,
       warehouseId: prevOrder.warehouseId,
+      paymentType: prevOrder.paymentType ?? undefined, // --- тут
       items: items.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,

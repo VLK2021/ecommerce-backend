@@ -220,6 +220,7 @@ model Order {
   orderNumber   Int       @unique
   userId        String?
   user          User?     @relation(fields: [userId], references: [id])
+  paymentType   String?
   customerName  String?
   customerPhone String?
   customerEmail String?

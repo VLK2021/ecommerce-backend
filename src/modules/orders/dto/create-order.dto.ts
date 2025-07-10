@@ -41,6 +41,14 @@ export class CreateOrderDto {
   deliveryType?: string;
 
   @ApiPropertyOptional({
+    example: 'cod',
+    description: 'Тип оплати (cod, card_online, ...)',
+  })
+  @IsOptional()
+  @IsString()
+  paymentType?: string;
+
+  @ApiPropertyOptional({
     example: { city: 'Львів', warehouse: '23' },
     type: Object,
   })
