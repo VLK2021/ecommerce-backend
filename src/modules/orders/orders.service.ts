@@ -224,16 +224,79 @@ export class OrdersService {
 
   async update(id: string, dto: UpdateOrderDto) {
     await this.findOne(id);
-    const data: Prisma.OrderUpdateInput = {};
-    if (dto.status) data.status = dto.status as OrderStatus;
-    if (dto.deliveryType) data.deliveryType = dto.deliveryType;
-    if (dto.deliveryData) data.deliveryData = dto.deliveryData;
-    if (dto.comment) data.comment = dto.comment;
-    if (dto.paymentType) data.paymentType = dto.paymentType; // --- тут
+
+    const updateData: Prisma.OrderUpdateInput = {};
+
+    if (dto.status) {
+      updateData.status = dto.status as OrderStatus;
+    }
+
+    if (dto.deliveryType) {
+      updateData.deliveryType = dto.deliveryType;
+    }
+
+    if (dto.deliveryData) {
+      updateData.deliveryData = dto.deliveryData;
+    }
+
+    if (dto.comment) {
+      updateData.comment = dto.comment;
+    }
+
+    if (dto.paymentType) {
+      updateData.paymentType = dto.paymentType;
+    }
+
+    if (dto.customerName) {
+      updateData.customerName = dto.customerName;
+    }
+
+    if (dto.customerPhone) {
+      updateData.customerPhone = dto.customerPhone;
+    }
+
+    if (dto.customerEmail) {
+      updateData.customerEmail = dto.customerEmail;
+    }
+
+    if (dto.totalPrice !== undefined) {
+      const numericTotalPrice =
+        typeof dto.totalPrice === 'string'
+          ? Number(dto.totalPrice)
+          : dto.totalPrice;
+      updateData.totalPrice = new Prisma.Decimal(numericTotalPrice);
+    }
+
+    if (dto.userId) {
+      updateData.user = { connect: { id: dto.userId } };
+    }
+
+    if (dto.warehouseId) {
+      updateData.warehouse = { connect: { id: dto.warehouseId } };
+    }
+
+    if (dto.items && Array.isArray(dto.items)) {
+      await this.prisma.orderItem.deleteMany({ where: { orderId: id } });
+
+      updateData.items = {
+        create: dto.items.map((item) => ({
+          quantity: item.quantity,
+          price: new Prisma.Decimal(
+            typeof item.price === 'string' ? Number(item.price) : item.price,
+          ),
+          productName: item.productName,
+          productCategoryId: item.productCategoryId ?? null,
+          productCategoryName: item.productCategoryName ?? null,
+          isActive: item.isActive ?? null,
+          productId: item.productId,
+          warehouseId: item.warehouseId,
+        })),
+      };
+    }
 
     return this.prisma.order.update({
       where: { id },
-      data,
+      data: updateData,
       include: {
         items: { include: { product: true, warehouse: true } },
         warehouse: true,
