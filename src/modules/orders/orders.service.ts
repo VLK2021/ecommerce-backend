@@ -223,80 +223,72 @@ export class OrdersService {
   }
 
   async update(id: string, dto: UpdateOrderDto) {
-    await this.findOne(id);
+    const existingOrder = await this.findOne(id);
 
-    const updateData: Prisma.OrderUpdateInput = {};
-
-    if (dto.status) {
-      updateData.status = dto.status as OrderStatus;
+    // Повертаємо залишки зі старих товарів
+    for (const oldItem of existingOrder.items) {
+      await this.prisma.productStock.updateMany({
+        where: {
+          productId: oldItem.productId,
+          warehouseId: oldItem.warehouseId,
+        },
+        data: {
+          quantity: { increment: oldItem.quantity },
+        },
+      });
     }
 
-    if (dto.deliveryType) {
-      updateData.deliveryType = dto.deliveryType;
-    }
+    // Видаляємо старі товари
+    await this.prisma.orderItem.deleteMany({ where: { orderId: id } });
 
-    if (dto.deliveryData) {
-      updateData.deliveryData = dto.deliveryData;
-    }
+    // Формуємо нові товари
+    const itemsData = (dto.items || []).map((item) => ({
+      quantity: item.quantity,
+      price: new Prisma.Decimal(Number(item.price)),
+      productName: item.productName,
+      productCategoryId: item.productCategoryId ?? null,
+      productCategoryName: item.productCategoryName ?? null,
+      isActive: item.isActive ?? null,
+      productId: item.productId,
+      warehouseId: item.warehouseId,
+    }));
 
-    if (dto.comment) {
-      updateData.comment = dto.comment;
-    }
+    const data: Prisma.OrderUpdateInput = {
+      ...(dto.status && { status: dto.status as OrderStatus }),
+      ...(dto.deliveryType && { deliveryType: dto.deliveryType }),
+      ...(dto.deliveryData && { deliveryData: dto.deliveryData }),
+      ...(dto.comment && { comment: dto.comment }),
+      ...(dto.paymentType && { paymentType: dto.paymentType }),
+      ...(dto.customerName && { customerName: dto.customerName }),
+      ...(dto.customerPhone && { customerPhone: dto.customerPhone }),
+      ...(dto.customerEmail && { customerEmail: dto.customerEmail }),
+      ...(dto.totalPrice !== undefined && {
+        totalPrice: new Prisma.Decimal(Number(dto.totalPrice)),
+      }),
+      ...(dto.userId && { user: { connect: { id: dto.userId } } }),
+      ...(dto.warehouseId && {
+        warehouse: { connect: { id: dto.warehouseId } },
+      }),
+      items: { create: itemsData },
+    };
 
-    if (dto.paymentType) {
-      updateData.paymentType = dto.paymentType;
-    }
-
-    if (dto.customerName) {
-      updateData.customerName = dto.customerName;
-    }
-
-    if (dto.customerPhone) {
-      updateData.customerPhone = dto.customerPhone;
-    }
-
-    if (dto.customerEmail) {
-      updateData.customerEmail = dto.customerEmail;
-    }
-
-    if (dto.totalPrice !== undefined) {
-      const numericTotalPrice =
-        typeof dto.totalPrice === 'string'
-          ? Number(dto.totalPrice)
-          : dto.totalPrice;
-      updateData.totalPrice = new Prisma.Decimal(numericTotalPrice);
-    }
-
-    if (dto.userId) {
-      updateData.user = { connect: { id: dto.userId } };
-    }
-
-    if (dto.warehouseId) {
-      updateData.warehouse = { connect: { id: dto.warehouseId } };
-    }
-
-    if (dto.items && Array.isArray(dto.items)) {
-      await this.prisma.orderItem.deleteMany({ where: { orderId: id } });
-
-      updateData.items = {
-        create: dto.items.map((item) => ({
-          quantity: item.quantity,
-          price: new Prisma.Decimal(
-            typeof item.price === 'string' ? Number(item.price) : item.price,
-          ),
-          productName: item.productName,
-          productCategoryId: item.productCategoryId ?? null,
-          productCategoryName: item.productCategoryName ?? null,
-          isActive: item.isActive ?? null,
+    // Віднімаємо залишки для нових товарів
+    for (const item of dto.items || []) {
+      await this.prisma.productStock.updateMany({
+        where: {
           productId: item.productId,
           warehouseId: item.warehouseId,
-        })),
-      };
+        },
+        data: {
+          quantity: { decrement: item.quantity },
+        },
+      });
     }
 
+    // Оновлюємо ордер
     return this.prisma.order.update({
       where: { id },
-      data: updateData,
+      data,
       include: {
         items: { include: { product: true, warehouse: true } },
         warehouse: true,
