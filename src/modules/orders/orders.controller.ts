@@ -12,13 +12,7 @@ import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { FilterOrdersDto } from './dto/filter-orders.dto';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiQuery,
-  ApiParam,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { OrderOutputDto } from './dto/order.output';
 
 @ApiTags('Orders')
@@ -72,8 +66,18 @@ export class OrdersController {
   // 🟧 Оновити лише статус
   @Patch(':id/status')
   @ApiOperation({ summary: 'Оновити лише статус замовлення' })
-  updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.ordersService.updateStatus(id, status);
+  @ApiResponse({ status: 200, description: 'Статус оновлено успішно' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'SHIPPED' },
+      },
+      required: ['status'],
+    },
+  })
+  updateStatus(@Param('id') id: string, @Body() body: { status: string }) {
+    return this.ordersService.updateStatus(id, body.status);
   }
 
   // 🟧 Додати/оновити коментар
